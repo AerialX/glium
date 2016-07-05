@@ -24,8 +24,63 @@ use {gl, context, draw_parameters};
 use version::Version;
 use version::Api;
 
+/// Framebuffer
+pub enum FramebufferTarget<'a> {
+    Default,
+    Current,
+    Id(gl::types::GLuint),
+    Attachments(&'a ValidatedAttachments<'a>),
+}
+
+impl<'a> From<gl::types::GLuint> for FramebufferTarget<'a> {
+    fn from(v: gl::types::GLuint) -> Self {
+        FramebufferTarget::Id(v)
+    }
+}
+
+impl<'a> From<&'a ValidatedAttachments<'a>> for FramebufferTarget<'a> {
+    fn from(v: &'a ValidatedAttachments<'a>) -> Self {
+        FramebufferTarget::Attachments(v)
+    }
+}
+
+impl<'a> From<Option<&'a ValidatedAttachments<'a>>> for FramebufferTarget<'a> {
+    fn from(v: Option<&'a ValidatedAttachments<'a>>) -> Self {
+        if let Some(v) = v {
+            FramebufferTarget::Attachments(v)
+        } else {
+            FramebufferTarget::Default
+        }
+    }
+}
+
+impl<'a> FramebufferTarget<'a> {
+    pub fn current_fbo_id(context: &mut context::CommandContext) -> gl::types::GLuint {
+        let mut ret = [0];
+        unsafe { context.gl.GetIntegerv(gl::FRAMEBUFFER_BINDING, ret.as_mut_ptr()) };
+        ret[0] as gl::types::GLuint
+    }
+
+    pub fn fbo_id(&self, context: &mut context::CommandContext) -> Option<gl::types::GLuint> {
+        match *self {
+            FramebufferTarget::Default => Some(fbo::FramebuffersContainer::get_framebuffer_for_drawing(context, None)),
+            FramebufferTarget::Attachments(attachments) => Some(fbo::FramebuffersContainer::get_framebuffer_for_drawing(context, Some(attachments))),
+            FramebufferTarget::Id(id) => Some(id),
+            FramebufferTarget::Current => None,
+        }
+    }
+
+    pub fn bind(&self, context: &mut context::CommandContext, draw: bool, read: bool) {
+        let fbo_id = self.fbo_id(context);
+
+        if let Some(fbo_id) = fbo_id {
+            unsafe { fbo::bind_framebuffer(context, fbo_id, draw, read) };
+        }
+    }
+}
+
 /// Draws everything.
-pub fn draw<'a, U, V>(context: &Context, framebuffer: Option<&ValidatedAttachments>,
+pub fn draw<'a, 'f, U, V, F: Into<FramebufferTarget<'f>>>(context: &Context, framebuffer: F,
                       vertex_buffers: V, indices: IndicesSource,
                       program: &Program, uniforms: &U, draw_parameters: &DrawParameters,
                       dimensions: (u32, u32)) -> Result<(), DrawError>
@@ -157,10 +212,7 @@ pub fn draw<'a, U, V>(context: &Context, framebuffer: Option<&ValidatedAttachmen
     };
 
     // binding the FBO to draw upon
-    {
-        let fbo_id = fbo::FramebuffersContainer::get_framebuffer_for_drawing(&mut ctxt, framebuffer);
-        unsafe { fbo::bind_framebuffer(&mut ctxt, fbo_id, true, false) };
-    };
+    framebuffer.into().bind(&mut ctxt, true, false);
 
     // binding the program and uniforms
     program.use_program(&mut ctxt);

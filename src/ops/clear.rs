@@ -1,4 +1,5 @@
 use fbo::{self, ValidatedAttachments};
+use ops::FramebufferTarget;
 
 use context::Context;
 use ContextExt;
@@ -14,15 +15,14 @@ use version::Version;
 use gl;
 
 
-pub fn clear(context: &Context, framebuffer: Option<&ValidatedAttachments>,
+pub fn clear<'f, F: Into<FramebufferTarget<'f>>>(context: &Context, framebuffer: F,
              rect: Option<&Rect>, color: Option<(f32, f32, f32, f32)>, color_srgb: bool,
              depth: Option<f32>, stencil: Option<i32>)
 {
     unsafe {
         let mut ctxt = context.make_current();
 
-        let fbo_id = fbo::FramebuffersContainer::get_framebuffer_for_drawing(&mut ctxt, framebuffer);
-        fbo::bind_framebuffer(&mut ctxt, fbo_id, true, false);
+        framebuffer.into().bind(&mut ctxt, true, false);
 
         if ctxt.state.enabled_rasterizer_discard {
             ctxt.gl.Disable(gl::RASTERIZER_DISCARD);

@@ -229,6 +229,11 @@ impl Context {
         self.backend.borrow().get_framebuffer_dimensions()
     }
 
+    pub unsafe fn reset_state(&self)
+    {
+        *self.state.borrow_mut() = Default::default();
+    }
+
     /// Changes the OpenGL context associated with this context.
     ///
     /// The new context **must** have lists shared with the old one.

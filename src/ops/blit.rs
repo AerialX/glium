@@ -6,21 +6,22 @@ use ContextExt;
 
 use fbo::FramebuffersContainer;
 use fbo::ValidatedAttachments;
+use ops::FramebufferTarget;
 
 use gl;
 use version::Version;
 use version::Api;
 
-pub fn blit(context: &Context, source: Option<&ValidatedAttachments>,
-            target: Option<&ValidatedAttachments>, mask: gl::types::GLbitfield,
+pub fn blit<'s, 't, S: Into<FramebufferTarget<'s>>, T: Into<FramebufferTarget<'t>>>(context: &Context, source: S,
+            target: T, mask: gl::types::GLbitfield,
             src_rect: &Rect, target_rect: &BlitTarget, filter: gl::types::GLenum)
 {
     unsafe {
         let mut ctxt = context.make_current();
 
         // FIXME: we don't draw on it
-        let source = FramebuffersContainer::get_framebuffer_for_drawing(&mut ctxt, source);
-        let target = FramebuffersContainer::get_framebuffer_for_drawing(&mut ctxt, target);
+        let source = source.into().fbo_id(&mut ctxt).unwrap_or_else(|| FramebufferTarget::current_fbo_id(&mut ctxt));
+        let target = target.into().fbo_id(&mut ctxt).unwrap_or_else(|| FramebufferTarget::current_fbo_id(&mut ctxt));
 
         // scissor testing influences blitting
         if ctxt.state.enabled_scissor_test {

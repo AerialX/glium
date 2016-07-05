@@ -102,6 +102,106 @@ mod default_fb;
 mod render_buffer;
 
 /// A framebuffer which has only one color attachment.
+pub struct CurrentFrameBuffer {
+    context: Rc<Context>,
+    dimensions: (u32, u32),
+}
+
+impl CurrentFrameBuffer {
+    pub fn new<F: Facade>(facade: &F, dimensions: (u32, u32)) -> Self {
+        CurrentFrameBuffer {
+            context: facade.get_context().clone(),
+            dimensions: dimensions,
+        }
+    }
+}
+
+impl Surface for CurrentFrameBuffer {
+    #[inline]
+    fn clear(&mut self, rect: Option<&Rect>, color: Option<(f32, f32, f32, f32)>, color_srgb: bool,
+             depth: Option<f32>, stencil: Option<i32>)
+    {
+        ops::clear(&self.context, ops::FramebufferTarget::Current, rect, color, color_srgb, depth, stencil);
+    }
+
+    #[inline]
+    fn get_dimensions(&self) -> (u32, u32) {
+        self.dimensions
+    }
+
+    #[inline]
+    fn get_depth_buffer_bits(&self) -> Option<u16> {
+        None
+    }
+
+    #[inline]
+    fn get_stencil_buffer_bits(&self) -> Option<u16> {
+        None
+    }
+
+    fn draw<'b, 'v, V, I, U>(&mut self, vb: V, ib: I, program: &::Program,
+        uniforms: &U, draw_parameters: &::DrawParameters) -> Result<(), DrawError>
+        where I: Into<::index::IndicesSource<'b>>, U: ::uniforms::Uniforms,
+        V: ::vertex::MultiVerticesSource<'v>
+    {
+        if !self.has_depth_buffer() && (draw_parameters.depth.test.requires_depth_buffer() ||
+                        draw_parameters.depth.write)
+        {
+            return Err(DrawError::NoDepthBuffer);
+        }
+
+        if let Some(viewport) = draw_parameters.viewport {
+            if viewport.width > self.context.capabilities().max_viewport_dims.0
+                    as u32
+            {
+                return Err(DrawError::ViewportTooLarge);
+            }
+            if viewport.height > self.context.capabilities().max_viewport_dims.1
+                    as u32
+            {
+                return Err(DrawError::ViewportTooLarge);
+            }
+        }
+
+        ops::draw(&self.context, ops::FramebufferTarget::Current, vb,
+                  ib.into(), program, uniforms, draw_parameters, self.get_dimensions())
+    }
+
+    #[inline]
+    fn blit_color<S>(&self, source_rect: &Rect, target: &S, target_rect: &BlitTarget,
+                     filter: uniforms::MagnifySamplerFilter) where S: Surface
+    {
+        unimplemented!()
+    }
+
+    #[inline]
+    fn blit_from_frame(&self, source_rect: &Rect, target_rect: &BlitTarget,
+                       filter: uniforms::MagnifySamplerFilter)
+    {
+        ops::blit(&self.context, None, ops::FramebufferTarget::Current,
+                  gl::COLOR_BUFFER_BIT, source_rect, target_rect, filter.to_glenum())
+    }
+
+    #[inline]
+    fn blit_from_simple_framebuffer(&self, source: &SimpleFrameBuffer,
+                                    source_rect: &Rect, target_rect: &BlitTarget,
+                                    filter: uniforms::MagnifySamplerFilter)
+    {
+        ops::blit(&self.context, source.get_attachments(), ops::FramebufferTarget::Current,
+                  gl::COLOR_BUFFER_BIT, source_rect, target_rect, filter.to_glenum())
+    }
+
+    #[inline]
+    fn blit_from_multioutput_framebuffer(&self, source: &MultiOutputFrameBuffer,
+                                         source_rect: &Rect, target_rect: &BlitTarget,
+                                         filter: uniforms::MagnifySamplerFilter)
+    {
+        ops::blit(&self.context, source.get_attachments(), ops::FramebufferTarget::Current,
+                  gl::COLOR_BUFFER_BIT, source_rect, target_rect, filter.to_glenum())
+    }
+}
+
+/// A framebuffer which has only one color attachment.
 pub struct SimpleFrameBuffer<'a> {
     context: Rc<Context>,
     attachments: fbo::ValidatedAttachments<'a>,
